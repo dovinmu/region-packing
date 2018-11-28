@@ -1,63 +1,50 @@
 
 let svg = d3.select("body").append("svg");
 
-var width = 700,
-    height = 580;
+var width = 600,
+    height = 400;
 
-var albersProjection = d3.geoAlbers()
-        .scale(100)
-        .rotate([0, 0, -30])
-        // .center([0, -38.4161])
-        .translate([width/2, height/2]);
+let nyLat = 41, nyLng = -74;
+function drawCountryCentered(code, color) {
+    let fname = `world.geo.json/countries/${code}.geo.json`
+    d3.json(fname).then(function(data) {
+        let [lng, lat] = d3.geoCentroid(data.features[0]);
+        // lat = nyLat;
+        // lng = nyLng;
 
-var geoPath = d3.geoPath()
-    .projection(albersProjection);
+        var projection = d3.geoOrthographic()
+                .scale(300)
+                .rotate([-lng, -lat, 0])
+                // .center([lat, 0])
+                .translate([width/2, height/2]);
+        console.log(code, lng, lat)
+        var geoPath = d3.geoPath()
+            .projection(projection);
 
+        drawCountry(data, code, color, geoPath);
+    });
+}
 
+function drawCountry(data, code, color, geoPath) {
+    svg.selectAll('g')
+        .data(data.features)
+        .enter()
+        .append('path')
+        .attr('id', code)
+        .attr('d', geoPath)
+        .attr('stroke', 'black')
+        .attr('fill', color);
+}
 
-d3.json('world.geo.json/countries/USA.geo.json').then(function(data) {
-  svg.selectAll('.country')
-      .data(data.features)
-      .enter()
-      .append('path')
-      .attr('d', geoPath)
-      .attr('fill', 'purple');
+function drawCountries() {
+    let countries = ['AFG', 'AGO', 'ALB', 'ARE', 'AUS', 'BEL', 'AUT', 'BGR', 'BHS', 'BIH', 'BLZ',
+    'BRA', 'BRN', 'BWA', 'CAF', 'CHE', 'CHL', 'CHN', 'CIV', 'COD', 'COL', 'CRI', 'CS-KM', 'CUB',
+    'CYP', 'CZE', 'DEU',
 
-});
-let canada;
-d3.json('world.geo.json/countries/CAN.geo.json').then(function(data) {
-  canada = svg.selectAll('.country')
-      .data(data.features)
-      .enter()
-      .append('path')
-      .attr('d', geoPath)
-      .attr('fill', 'red')
-});
+    'USA', 'CAN', 'MEX', 'RUS', 'EGY', 'JPN', 'ATA'];
+    // countries.forEach(code => drawCountryCentered(code, 'green'));
+    drawCountryCentered('USA', 'red');
+    drawCountryCentered('ATA', 'green');
+}
 
-d3.json('world.geo.json/countries/ARG.geo.json').then(function(data) {
-  svg.selectAll('.country')
-      .data(data.features)
-      .enter()
-      .append('path')
-      .attr('d', geoPath)
-      .attr('fill', 'green');
-
-});
-
-d3.json('world.geo.json/countries/BRA.geo.json').then(function(data) {
-  svg.selectAll('.country')
-      .data(data.features)
-      .enter()
-      .append('path')
-      .attr('d', geoPath)
-      .attr('fill', 'green');
-
-});
-
-setTimeout(function(){
-  console.log('KK');
-  albersProjection.scale(200);
-  geoPath = d3.geoPath()
-      .projection(albersProjection);
-  // canada.attr('d', geoPath);
-}, 2000)
+drawCountries()
