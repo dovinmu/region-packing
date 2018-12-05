@@ -79,6 +79,20 @@ function drawCountry(features, code, color, geoPath, opacity) {
         .attr('opacity', opacity)
 }
 
+function drawCountryPreprojected(features, code, color, opacity) {
+    if(!opacity) opacity = 0.75;
+    var path = d3.geoPath().projection(null);
+    svg.selectAll('g')
+        .data(features)
+        .enter()
+        .append('path')
+        .attr('id', code)
+        .attr('d', path)
+        .attr('stroke', 'black')
+        .attr('fill', color)
+        .attr('opacity', opacity)
+}
+
 function redrawCountry(code, color) {
     let country = svg.select(`#${code}`);
     if(color) country.attr('color', color);
@@ -171,34 +185,18 @@ const container = { centroids: {} }
 function init() {
     container.ticks = 0;
     createGeoPath();
-    let movData, usaData;
+    let movData, usaData, preprojData;
     Promise.all([getCountryGeojson('USA').then((data) => usaData = data),
-                 getCountryGeojson(container.country).then((data) => movData = data)])
+                 getCountryGeojson(container.country).then((data) => movData = data),
+                 getCountryGeojson('RUS.equatorial').then((data) => preprojData = data)])
         .then(function() {
             container.lower48 = multiPologonToMaxPolygon(usaData.features[0]);
             container.mover1 = multiPologonToMaxPolygon(movData.features[0]);
-            // container.mover1 = turf.truncate(container.mover1);
-
-            // container.intersection = intersect(container.mover1, container.lower48) || emptyGeom();
-            // console.log('moving country', container.mover1.type, container.mover1.geometry.type, container.mover1);
-            // console.log('static country', container.lower48);
-            // console.log('intersection', container.intersection);
-            // console.log('cost', cost(container.mover1, container.lower48));
-
-            // move the country to a good starting point
-            let bearing = turf.rhumbBearing(turf.centroid(container.mover1), turf.centroid(container.lower48));
-            let dist = turf.distance(turf.centroid(container.mover1), turf.centroid(container.lower48));
-            // if(dist > 5000) {
-            //     dist = 5000;
-            // }
-            // console.log('bearing', bearing, 'dist', dist);
-            // container.mover1 = turf.transformTranslate(container.mover1, 1, bearing, {zTranslation: 100});
-            let projectedMover = d3.geoProject(container.mover1, container.projection)
-            console.log('original', container.mover1);
-            console.log('projection', projectedMover);
 
             drawCountry([container.mover1], 'MOV1', 'green', container.geoPath);
             drawCountry([container.lower48], 'USA', 'orange', container.geoPath);
+            drawCountryPreprojected([preprojData], 'PRE', 'purple');
+            
             container.startTs =+ new Date();
     }).catch(function(err) {
         console.log('SOME SHIT WENT DOWN')
@@ -293,4 +291,4 @@ init()
 drawCountries()
 // container.intervalId = setInterval(step, 1000);
 
-setTimeout(step, 2000);
+// setTimeout(step, 2000);
