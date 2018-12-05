@@ -184,19 +184,20 @@ const container = { centroids: {} }
 
 function init() {
     container.ticks = 0;
-    createGeoPath();
-    let movData, usaData, preprojData;
-    Promise.all([getCountryGeojson('USA').then((data) => usaData = data),
-                 getCountryGeojson(container.country).then((data) => movData = data),
-                 getCountryGeojson('RUS.equatorial').then((data) => preprojData = data)])
+    let movData, usaData;
+    Promise.all([getCountryGeojson('USA.equatorial').then((data) => usaData = data),
+                 getCountryGeojson('RUS.equatorial').then((data) => movData = data)])
         .then(function() {
             container.lower48 = multiPologonToMaxPolygon(usaData.features[0]);
             container.mover1 = multiPologonToMaxPolygon(movData.features[0]);
 
-            drawCountry([container.mover1], 'MOV1', 'green', container.geoPath);
-            drawCountry([container.lower48], 'USA', 'orange', container.geoPath);
-            drawCountryPreprojected([preprojData], 'PRE', 'purple');
-            
+            drawCountryPreprojected([container.lower48], 'USA', 'orange');
+            drawCountryPreprojected([container.mover1], 'MOV', 'green');
+
+            container.intersection = intersect(container.lower48, container.mover1);
+            drawCountryPreprojected([container.intersection], 'INT', 'red');
+            console.log('intersection', container.intersection);
+
             container.startTs =+ new Date();
     }).catch(function(err) {
         console.log('SOME SHIT WENT DOWN')
@@ -208,13 +209,31 @@ function estimateGradient(parameters) {
     // for each parameter, check if making it larger or smaller changes cost for the better
 }
 
+function translateX(geojson, amt) {
+    for(let i=0; i<geojson.geometry.coordinates[0].length; i++) {
+        geojson.geometry.coordinates[0][i][0] += amt;
+    }
+    return geojson;
+}
+
+function translateY(geojson, amt) {
+    for(let i=0; i<geojson.geometry.coordinates[0].length; i++) {
+        geojson.geometry.coordinates[0][i][1] += amt;
+    }
+    return geojson;
+}
+
 function step() {
     container.ticks += 1;
     // rotate, dx, dy a country and compute the new cost function
-    let rate = 100,
+    let rate = 5,
         gradient = { x:0, y:0, r:0 },
         currCost;
     try{
+        // console.log('russia', turf.area(container.mover1)/1000000, 'mp^2')
+        // console.log('usa', turf.area(container.lower48)/1000000, 'mp^2')
+        console.log('intersection', (turf.area(container.intersection)/1000000).toFixed(0)/1000, 'gp^2')
+        // console.log('intersection > usa', turf.area(container.intersection) > turf.area(container.lower48))
         currCost = cost(container.mover1, container.lower48);
     } catch(err) {
         console.error("Data not loaded");
@@ -222,8 +241,8 @@ function step() {
     //     clearInterval(container.intervalId);
     }
     // +x moves west
-    let xPlus = turf.transformTranslate(container.mover1, rate, 90, {mutate: false});
-    let xMinus = turf.transformTranslate(container.mover1, -rate, 90, {mutate: false});
+    let xPlus = translateX(container.mover1, rate);
+    let xMinus = translateX(container.mover1, -rate);
     let intersectionXPlus = intersect(xPlus, container.lower48),
         intersectionXMinus = intersect(xMinus, container.lower48);
 
@@ -235,11 +254,10 @@ function step() {
     }
 
     // +y moves south
-    let yPlus = turf.transformTranslate(container.mover1, rate, 180, {mutate: false});
-    let yMinus = turf.transformTranslate(container.mover1, rate, 0, {mutate: false});
+    let yPlus = translateY(container.mover1, rate);
+    let yMinus = translateY(container.mover1, -rate);
     let intersectionYPlus = intersect(yPlus, container.lower48),
         intersectionYMinus = intersect(yMinus, container.lower48);
-
     if(cost(yPlus, container.lower48, intersectionYPlus) < currCost) {
            gradient.y = rate;
     }
@@ -247,37 +265,35 @@ function step() {
             gradient.y = -rate;
     }
 
-    let rPlus = turf.transformRotate(container.mover1, rate/10);
-    let rMinus = turf.transformRotate(container.mover1, -rate/10);
-    let intersectionRPlus = intersect(rPlus, container.lower48),
-        intersectionRMinus = intersect(rMinus, container.lower48);
+    // let rPlus = turf.transformRotate(container.mover1, rate/10);
+    // let rMinus = turf.transformRotate(container.mover1, -rate/10);
+    // let intersectionRPlus = intersect(rPlus, container.lower48),
+    //     intersectionRMinus = intersect(rMinus, container.lower48);
+    //
+    // if(cost(rPlus, container.lower48, intersectionRPlus) < currCost) {
+    //        gradient.r = rate/10;
+    // }
+    // else if(cost(rMinus, container.lower48, intersectionRMinus) < currCost) {
+    //         gradient.r = -rate/10;
+    // }
 
-    if(cost(rPlus, container.lower48, intersectionRPlus) < currCost) {
-           gradient.r = rate/10;
-    }
-    else if(cost(rMinus, container.lower48, intersectionRMinus) < currCost) {
-            gradient.r = -rate/10;
-    }
+    // if(container.ticks < 10) {
+    //     gradient.x += (0.5-Math.random()) * (100 / container.ticks);
+    //     gradient.y += (0.5-Math.random()) * (100 / container.ticks);
+    // }
+    container.mover1 = translateX(container.mover1, gradient.x);
+    container.mover1 = translateY(container.mover1, gradient.y);
+    let newCost = cost(container.mover1, container.lower48);
 
-    gradient.x = 0;
-    gradient.y = 3000;
-    gradient.r = 0;
-    // turf.js' documentation is a BED OF LIES and negative numbers mess things up
-    if(gradient.x < 0) container.mover1 = turf.transformTranslate(container.mover1, -gradient.x, 270);
-    else               container.mover1 = turf.transformTranslate(container.mover1, gradient.x, 90);
-    if(gradient.y < 0) container.mover1 = turf.transformTranslate(container.mover1, -gradient.y, 0);
-    else               container.mover1 = turf.transformTranslate(container.mover1, gradient.y, 180);
-    container.mover1 = turf.transformRotate(container.mover1, gradient.r);
-
-    console.log(gradient, normedCost(container.mover1, container.lower48).toFixed(3), turf.area(container.mover1).toFixed());
     svg.select('#cost-text').text(`cost: ${(normedCost(container.mover1, container.lower48)).toFixed(2)}`);
 
-    deleteCountry('MOV1');
-    drawCountry([container.mover1], 'MOV1', 'green', container.geoPath);
-    deleteCountry('intersection');
-    drawCountry([container.intersection], 'intersection', 'red', container.geoPath);
+    deleteCountry('MOV');
+    drawCountryPreprojected([container.mover1], 'MOV', 'green');
+    deleteCountry('INT');
+    container.intersection = intersect(container.lower48, container.mover1);
+    drawCountryPreprojected([container.intersection], 'INT', 'red');
 
-    if(gradient.x === 0 && gradient.y === 0 && gradient.r === 0) {
+    if(container.ticks > 100 || (gradient.x === 0 && gradient.y === 0 && gradient.r === 0)) {
         clearInterval(container.intervalId);
         console.log(container.ticks, 'ticks');
         let seconds = (+ new Date() - container.startTs)/1000;
@@ -287,8 +303,9 @@ function step() {
 }
 
 container.country = 'RUS'
+createGeoPath();
 init()
-drawCountries()
-// container.intervalId = setInterval(step, 1000);
+// drawCountries()
+container.intervalId = setInterval(step, 1000);
 
-// setTimeout(step, 2000);
+// setTimeout(step, 200);
