@@ -38,7 +38,7 @@ function getCountryGeojson(code) {
         container.centroids[code] = turf.centroid(data.features[0]).geometry.coordinates;
         // console.log(`"${code}": [${turf.centroid(data.features[0]).geometry.coordinates}]`);
         return data;
-    });
+    }).catch(err => console.error);
 }
 
 function drawCountryCentered(code, color, center, scale) {
@@ -164,9 +164,7 @@ function normedCost(poly1, poly2, intersection) {
     if(!intersection)
         intersection = intersect(poly1, poly2);
     let intersectionArea = turf.area(intersection);
-    // if(intersectionArea === 0)
-        return  100 - (turf.area(intersection) / (turf.area(poly1) + turf.area(poly2))) + distCentroids(poly1, poly2) / 10000;
-    // return 100 - (turf.area(intersection) / (turf.area(poly1) + turf.area(poly2)));
+    return  100 - (turf.area(intersection) / turf.area(poly2));
 }
 
 const allCodes = ['AFG', 'AGO', 'ALB', 'ARE', 'ARG', 'ARM', 'ATA', 'ATF', 'AUS', 'AUT', 'AZE', 'BDI', 'BEL', 'BEN', 'BFA', 'BGD', 'BGR', 'BHS', 'BIH', 'BLR', 'BLZ', 'BMU', 'BOL', 'BRA', 'BRN', 'BTN', 'BWA', 'CAF', 'CAN', 'CHE', 'CHL', 'CHN', 'CIV', 'CMR', 'COD', 'COG', 'COL', 'CRI', 'CS-KM', 'CUB', 'CYP', 'CZE', 'DEU', 'DJI', 'DNK', 'DOM', 'DZA', 'ECU', 'EGY', 'ERI', 'ESH', 'ESP', 'EST', 'ETH', 'FIN', 'FJI', 'FLK', 'FRA', 'GAB', 'GBR', 'GEO', 'get all names', 'GHA', 'GIN', 'GMB', 'GNB', 'GNQ', 'GRC', 'GRL', 'GTM', 'GUF', 'GUY', 'HND', 'HRV', 'HTI', 'HUN', 'IDN', 'IND', 'IRL', 'IRN', 'IRQ', 'ISL', 'ISR', 'ITA', 'JAM', 'JOR', 'JPN', 'KAZ', 'KEN', 'KGZ', 'KHM', 'KOR', 'KWT', 'LAO', 'LBN', 'LBR', 'LBY', 'LKA', 'LSO', 'LTU', 'LUX', 'LVA', 'MAR', 'MDA', 'MDG', 'MEX', 'MKD', 'MLI', 'MLT', 'MMR', 'MNE', 'MNG', 'MOZ', 'MRT', 'MWI', 'MYS', 'NAM', 'NCL', 'NER', 'NGA', 'NIC', 'NLD', 'NOR', 'NPL', 'NZL', 'OMN', 'PAK', 'PAN', 'PER', 'PHL', 'PNG', 'POL', 'PRI', 'PRK', 'PRT', 'PRY', 'PSE', 'QAT', 'ROU', 'RUS', 'RWA', 'SAU', 'SDN', 'SEN', 'SLB', 'SLE', 'SLV', 'SOM', 'SRB', 'SSD', 'SUR', 'SVK', 'SVN', 'SWE', 'SWZ', 'SYR', 'TCD', 'TGO', 'THA', 'TJK', 'TKM', 'TLS', 'TTO', 'TUN', 'TUR', 'TWN', 'TZA', 'UGA', 'UKR', 'URY', 'USA', 'USA', 'UZB', 'VEN', 'VNM', 'VUT', 'YEM', 'ZAF', 'ZMB', 'ZWE']
@@ -245,20 +243,14 @@ const container = { centroids: {} }
 function init() {
     container.ticks = 0;
     let movData, usaData;
-    Promise.all([getCountryGeojson('USA.equatorial').then((data) => usaData = data),
-                 getCountryGeojson('RUS.equatorial').then((data) => movData = data)])
+    Promise.all([getCountryGeojson('USA.ortho').then((data) => usaData = data),
+                 getCountryGeojson('ATA.ortho').then((data) => movData = data)])
         .then(function() {
             container.lower48 = negateY(scaleBy(multiPologonToMaxPolygon(usaData.features[0]), 0.1));
             console.log("USA", container.lower48);
             container.mover1 = negateY(scaleBy(multiPologonToMaxPolygon(movData.features[0]), 0.1));
-            // container.mover1 = emptyGeom();
-            // container.mover1.geometry.coordinates = [[
-            //     [500, 0],
-            //     [400, 0],
-            //     [400, 100],
-            //     [500, 100],
-            //     [500, 0]
-            // ]];
+            console.log(container.mover1);
+
             container.intersection = intersect(container.lower48, container.mover1);
             drawCountry([container.intersection], 'INT', 'red');
             drawCountry([container.lower48], 'USA', 'orange');
@@ -272,16 +264,13 @@ function init() {
 
 function step() {
     container.ticks += 1;
-    if(container.ticks > 50) endLoop();
+    if(container.ticks > 500) endLoop();
     // rotate, dx, dy a country and compute the new cost function
-    let rate = 2,
-        rotRate = 2,
+    let rate = 1 + 100/(container.ticks+20),
+        rotRate = 5 + 100/(container.ticks+20),
         gradient = { x:0, y:0, r:0 },
         currCost;
     try{
-        // console.log('russia', turf.area(container.mover1)/1000000, 'mp^2')
-        // console.log('usa', turf.area(container.lower48)/1000000, 'mp^2')
-        // console.log('intersection > usa', turf.area(container.intersection) > turf.area(container.lower48))
         currCost = cost(container.mover1, container.lower48);
     } catch(err) {
         console.error("could not compute cost ...");
@@ -335,10 +324,11 @@ function step() {
         gradient.r = -rotRate;
     }
 
-    // if(container.ticks < 10) {
-    //     gradient.x += (0.5-Math.random()) * (100 / container.ticks);
-    //     gradient.y += (0.5-Math.random()) * (100 / container.ticks);
-    // }
+    if(container.ticks < 100) {
+        gradient.x += (0.5-Math.random()) * (100 / container.ticks);
+        gradient.y += (0.5-Math.random()) * (100 / container.ticks);
+        gradient.r += (0.5-Math.random()) * (50 / container.ticks);
+    }
 
     container.mover1 = translateX(container.mover1, gradient.x);
     container.mover1 = translateY(container.mover1, gradient.y);
@@ -373,6 +363,6 @@ container.country = 'RUS'
 createGeoPath();
 init()
 drawCountries()
-container.intervalId = setInterval(step, 250);
+container.intervalId = setInterval(step, 100);
 
 // setTimeout(step, 200);
