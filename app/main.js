@@ -4,7 +4,7 @@ const _ = require('lodash');
 
 const width = window.innerWidth || document.body.clientWidth,
       height = window.innerHeight || document.body.clientHeight,
-      maxTicks = 50,
+      maxTicks = 10,
       stepMs = 10,
       zoom = 100,
       scale = 0.01; // the amount to scale the original size of the countries
@@ -75,6 +75,7 @@ function drawCountry(features, code, color, opacity) {
         .enter()
         .append('path')
         .attr('id', code)
+        .attr('class', 'country')
         .attr('d', state.geoPath)
         .attr('stroke', 'black')
         .attr('fill', color)
@@ -103,6 +104,10 @@ function redrawCountry(code, color) {
 
 function deleteCountry(code) {
     svg.select(`#${code}`).remove();
+}
+
+function deleteCountries() {
+    svg.selectAll('.country').remove();
 }
 
 function multiPologonToMaxPolygon(multipoly) {
@@ -190,12 +195,12 @@ function cost(moverPolys, staticPoly, movedId) {
     let totalCost = 0;
     _.each(moverPolys, (moverPoly,i) => {
         let intArea = intersectionArea(moverPoly, staticPoly, movedId);
-        if(intArea === 0) {
+        // if(intArea === 0) {
             let dist = distCentroids(moverPoly, staticPoly);
             totalCost += dist**2 + state.containerArea - intArea;
-        } else {
-            totalCost += state.containerArea - intArea;
-        }
+        // } else {
+        //     totalCost += state.containerArea - intArea;
+        // }
         _.each(moverPolys, (otherMoverPoly,j) => {
             if(i !== j) {
                 intArea = intersectionArea(moverPoly, otherMoverPoly, movedId);
@@ -346,13 +351,16 @@ function computeGradient(mover, precomps) {
 
 const state = { centroids: {}, ticks: 0, movers: [], lower48: null }
 
-function init() {
+function initMap() {
     state.ticks = 0;
     let movData = [], containerData;
     let allPromises = _.map(state.packingCountries, code => {
         return getCountryGeojson(`${code}.ortho`).then((data) => movData.push(data));
     });
-    allPromises.push(getCountryGeojson(`${state.containerCode}.ortho`).then((data) => containerData = data));
+    allPromises.push(getCountryGeojson(`${state.containerCode}.ortho`)
+        .then((data) => containerData = data)
+        .catch(err => console.error)
+    );
     Promise.all(allPromises)
         .then(function() {
             state.container = negateY(scaleBy(multiPologonToMaxPolygon(containerData.features[0]), 0.01));
@@ -381,6 +389,21 @@ function init() {
     }).catch(function(err) {
         console.log('SOME SHIT WENT DOWN')
         console.log(err);
+    });
+}
+
+function initMenu() {
+    d3.select('#country-selector').append(function() {
+        console.log("creating new option");
+        return document.createElement('p');
+    });
+    d3.select('#country-selector').on('change', (e) => {
+        let selector = document.getElementById('country-selector');
+        console.log('selected country', selector.value);
+        deleteCountries();
+        endLoop();
+        state.containerCode = selector.value;
+        initMap();
     });
 }
 
@@ -432,10 +455,11 @@ function endLoop() {
     console.log(((seconds*1000)/state.ticks).toFixed(1), 'ms/tick');
 }
 
-state.containerCode = 'USA'
-state.packingCountries = ['MEX', 'IND', 'JPN']
+state.containerCode = 'USA';
+state.packingCountries = ['MEX', 'IND', 'JPN', 'AFG'];
 // state.packingCountries = ['AFG', 'AGO', 'ALB', 'ARE', 'ARG', 'ARM', 'ATA', 'ATF', 'AUS', 'AUT', 'AZE', 'BDI', 'BEL', 'BEN', 'BFA', 'BGD', 'BGR', 'BHS', 'BIH'];
 // state.packingCountries = ['AFG', 'AGO', 'ALB', 'ARE', 'ARG', 'ARM', 'ATA', 'ATF', 'AUS', 'AUT', 'AZE', 'BDI', 'BEL', 'BEN', 'BFA', 'BGD', 'BGR', 'BHS', 'BIH', 'BLR', 'BLZ', 'BMU', 'BOL', 'BRA', 'BRN', 'BTN', 'BWA', 'CAF', 'CAN', 'CHE', 'CHL', 'CHN', 'CIV', 'CMR', 'COD', 'COG', 'COL', 'CRI', 'CS-KM', 'CUB', 'CYP', 'CZE', 'DEU', 'DJI', 'DNK', 'DOM', 'DZA', 'ECU', 'EGY', 'ERI', 'ESH', 'ESP', 'EST', 'ETH', 'FIN', 'FJI', 'FLK', 'FRA', 'GAB', 'GBR', 'GEO',  'GHA', 'GIN', 'GMB', 'GNB', 'GNQ', 'GRC', 'GRL', 'GTM', 'GUF', 'GUY', 'HND', 'HRV', 'HTI', 'HUN', 'IDN', 'IND', 'IRL', 'IRN', 'IRQ', 'ISL', 'ISR', 'ITA', 'JAM', 'JOR', 'JPN', 'KAZ', 'KEN', 'KGZ', 'KHM', 'KOR', 'KWT', 'LAO', 'LBN', 'LBR', 'LBY', 'LKA', 'LSO', 'LTU', 'LUX', 'LVA', 'MAR', 'MDA', 'MDG', 'MEX', 'MKD', 'MLI', 'MLT', 'MMR', 'MNE', 'MNG', 'MOZ', 'MRT', 'MWI', 'MYS', 'NAM', 'NCL', 'NER', 'NGA', 'NIC', 'NLD', 'NOR', 'NPL', 'NZL', 'OMN', 'PAK', 'PAN', 'PER', 'PHL', 'PNG', 'POL', 'PRI', 'PRK', 'PRT', 'PRY', 'PSE', 'QAT', 'ROU', 'RWA', 'SAU', 'SDN', 'SEN', 'SLB', 'SLE', 'SLV', 'SOM', 'SRB', 'SSD', 'SUR', 'SVK', 'SVN', 'SWE', 'SWZ', 'SYR', 'TCD', 'TGO', 'THA', 'TJK', 'TKM', 'TLS', 'TTO', 'TUN', 'TUR', 'TWN', 'TZA', 'UGA', 'UKR', 'URY', 'USA', 'USA', 'UZB', 'VEN', 'VNM', 'VUT', 'YEM', 'ZAF', 'ZMB', 'ZWE']
 createGeoPath();
-init();
-drawCountries();
+initMap();
+initMenu();
+// drawCountries();

@@ -18,10 +18,20 @@
     svg {
          {fill:red;}
     }
+    #country-selector {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+    }
     </style>
   </head>
   <body>
-    <div id="root"></div>
-
+    <div id="root">
+        <select id="country-selector">
+            <option value="USA" selected>USA</option>
+            <option value="RUS">Russia</option>
+            <option value="ATA">Antarctica</option>
+        </select>
+    </div>
   </body>
 </html>
