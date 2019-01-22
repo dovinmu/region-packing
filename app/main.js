@@ -11,7 +11,7 @@ import {
 } from './simulation.js'
 const width = window.innerWidth || document.body.clientWidth,
       height = window.innerHeight || document.body.clientHeight,
-      maxTicks = 10,
+      maxTicks = 99,
       stepMs = 10,
       zoom = 100,
       scale = 0.01; // the amount to scale the original size of the countries
@@ -187,7 +187,9 @@ function initMap() {
     }));
     Promise.all(allPromises)
         .then(function() {
-            state.container = negateY(scaleBy(multiPolygonToMaxPolygon(containerData.features[0]), 0.01));
+            let clonedContainer = _.cloneDeep(containerData);
+            state.container = turf.simplify( negateY(scaleBy(multiPolygonToMaxPolygon(clonedContainer.features[0]), 0.01)), {tolerance:0.05});
+            state.containerDraw = negateY(scaleBy(multiPolygonToMaxPolygon(containerData.features[0]), 0.01));
             state.containerArea = turf.area(state.container);
 
             state.movers = _.map(movData, data => {
@@ -214,7 +216,8 @@ function initMap() {
             });
             console.log(turf.area(state.movers[0]), turf.area(state.drawers[0]));
 
-            drawCountry([state.container], state.containerCode, 'gray');
+            // drawCountry([state.container], state.containerCode, 'gray');
+            drawCountry([state.containerDraw], state.containerCode, 'gray');
 
             state.startTs =+ new Date();
             state.intervalId = setInterval(step, stepMs);
