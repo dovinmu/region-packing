@@ -11,9 +11,9 @@ import {
 } from './simulation.js'
 const width = window.innerWidth || document.body.clientWidth,
       height = window.innerHeight || document.body.clientHeight,
-      maxTicks = 99,
+      maxTicks = 200,
       stepMs = 10,
-      zoom = 100,
+      zoom = 150,
       scale = 0.01; // the amount to scale the original size of the countries
 
 let svg = d3.select("body").append("svg")
@@ -32,6 +32,7 @@ const allCodes = ['AFG', 'AGO', 'ALB', 'ARE', 'ARG', 'ARM', 'ATA', 'ATF', 'AUS',
 const selectedCodes = ['AFG', 'AGO', 'ALB', 'ARE', 'AUS', 'BEL', 'AUT', 'BGR', 'BHS', 'BIH', 'BLZ', 'BOL',
 'BRA', 'BRN', 'BWA', 'CAF', 'CHE', 'CHL', 'CHN', 'CIV', 'COD', 'COL', 'CRI', 'CS-KM', 'CUB',
 'CYP', 'CZE', 'DEU', 'DOM', 'DZA', 'ECU', 'ESH', 'FJI', 'FLK', 'GEO', 'GIN', 'GTM', 'GUF', 'JAM', 'NIC', 'PER', 'VEN', 'GUY', 'USA', 'CAN', 'MEX', 'RUS', 'EGY', 'JPN', 'ATA'];
+const problemCodes = ["ESH"]
 
 function createGeoPath() {
     state.projection = d3.geoMercator()
@@ -120,7 +121,6 @@ function deleteCountries() {
 function multiPolygonToMaxPolygon(multipoly) {
     // take the largest polygon in a multipologon and return just that as a geojson object
     // this is necessary because turf.js doesn't compute intersections on multipologons
-    console.log(multipoly);
     let coordinates = _.maxBy(multipoly.geometry.coordinates, l => l[0].length);
     if(coordinates.length !== 1) coordinates = [coordinates]; // 🙄
     return {
@@ -181,7 +181,6 @@ function initMap() {
                 state.area[datum.cca3] = datum.area;
                 state.area_sorted.push({ 'code': datum.cca3, 'area': datum.area });
             });
-            console.log('area', state.area)
             state.area_sorted = _.sortBy(state.area_sorted, 'area');
             console.log('sorted area', state.area_sorted);
     }));
@@ -207,14 +206,12 @@ function initMap() {
             _.each(state.movers, (data,i) => {
                 let dist = distCentroids(data, state.container);
                 let bearing = turf.rhumbBearing(turf.centroid(data), turf.centroid(state.container));
-                console.log(`"${i}": [${turf.centroid(data).geometry.coordinates}]`);
                 turf.transformTranslate(data, dist/2, bearing, {mutate:true});
                 turf.transformTranslate(state.drawers[i], dist/2, bearing, {mutate:true});
                 // console.log(`"${i}": [${turf.centroid(data).geometry.coordinates}]`);
                 drawCountry([state.movers[i]], `MOV${i}`, 'red');
                 drawCountry([state.drawers[i]], `DRAW${i}`, 'green');
             });
-            console.log(turf.area(state.movers[0]), turf.area(state.drawers[0]));
 
             // drawCountry([state.container], state.containerCode, 'gray');
             drawCountry([state.containerDraw], state.containerCode, 'gray');
@@ -246,14 +243,15 @@ function initMenu() {
 
 function decidePackingCountries() {
     // choose recognizable countries that will all basically fit inside of the chosen country
-    console.log('area of', state.containerCode, state.area[state.containerCode]);
+    console.log('packing', state.containerCode);
     let totalMoverArea = 0;
     state.packingCountries = [];
     _.each(_.shuffle(selectedCodes), country => {
-        if(state.packingCountries.length < 8 && state.area[country] + totalMoverArea < state.area[state.containerCode]) {
+        if(state.packingCountries.length < 8 && state.area[country] + totalMoverArea < state.area[state.containerCode] && problemCodes.indexOf(country) == -1) {
             totalMoverArea += state.area[country];
             state.packingCountries.push(country);
         }
+        console.log((100*totalMoverArea/state.area[state.containerCode]).toFixed(2), '%');
     })
     console.log('selected these countries:', state.packingCountries);
 }
@@ -266,14 +264,15 @@ function step() {
         endLoop();
     }
 
-    let restartCycle = 100; // if we want to jump up the learning rate (SGD w/ restarts)
+    let resetRate = 10;
     let precomps = {
-            ticksSquared: (state.ticks % restartCycle)**2 + 1,
+            ticksSquared: (state.ticks < 50 ? state.ticks % resetRate : state.ticks)**2 + 1,
             perterbation: 1,
-            rotRate: 1 + 100/(state.ticks+20),
     }
-    precomps.rate = scale/4 + scale*(1000/(precomps.ticksSquared+1));
-    console.log(state.ticks, 'rate', precomps.rate);
+    precomps.rotRate = 100/(state.ticks+5);
+    precomps.rate = scale*(1000/(precomps.ticksSquared+5));
+    console.log(state.ticks, 'rate', precomps.rate.toFixed(4), 'rotRate', precomps.rotRate.toFixed(1));
+    // console.log('tock');
 
     let gradients = _.map(state.movers, mov => computeGradient(mov, precomps, state));
 
@@ -287,14 +286,14 @@ function step() {
         state.drawers[i] = translateX(state.drawers[i], gradient.x);
         state.drawers[i] = translateY(state.drawers[i], gradient.y);
         turf.transformRotate(state.drawers[i], gradient.r, {mutate: true});
-        // console.log(state.movers[i].id, turf.centroid(state.movers[i]).geometry.coordinates);
+
+        let shadowDistance = distCentroids(state.movers[i], state.drawers[i]);
+        console.log(colors[i%colors.length], 'distance', shadowDistance.toFixed(1))
 
         deleteCountry(`MOV${i}`);
         deleteCountry(`DRAW${i}`);
-        // drawCountry([state.movers[i]], `MOV${i}`, colors[i%colors.length]);
-        drawCountry([state.movers[i]], `MOV${i}`, 'red');
-        // drawCountry([state.drawers[i]], `DRAW${i}`, colors[i%colors.length]);
-        drawCountry([state.drawers[i]], `DRAW${i}`, 'green');
+        drawCountry([state.movers[i]], `MOV${i}`, colors[i%colors.length]);
+        drawCountry([state.drawers[i]], `DRAW${i}`, colors[i%colors.length]);
         if(gradient.x !== 0 || gradient.y !== 0 || gradient.r !== 0) {
             somethingMoved = true;
         }
@@ -312,12 +311,15 @@ function endLoop() {
     console.log(state.ticks, 'ticks');
     let seconds = (+ new Date() - state.startTs)/1000;
     console.log(seconds.toFixed(2), 's')
-    console.log(((seconds*1000)/state.ticks).toFixed(1), 'ms/tick');
+    let msPerTick = ((seconds*1000)/state.ticks);
+    console.log(msPerTick.toFixed(1), 'ms/tick');
+    console.log((1000/msPerTick).toFixed(1), 'fps');
 }
 
 state.containerCode = 'USA';
 state.packingCountries = ['MEX', 'IND', 'JPN', 'AFG'];
 
+// problem countries: "ESH"
 createGeoPath();
 initMap();
 initMenu();
