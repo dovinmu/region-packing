@@ -6,6 +6,7 @@ import {
     distCentroids,
     cost,
     intersectionArea,
+    overlapCost,
     translateX,
     translateY
 } from './simulation.js'
@@ -209,7 +210,7 @@ function initMap() {
                 turf.transformTranslate(data, dist/2, bearing, {mutate:true});
                 turf.transformTranslate(state.drawers[i], dist/2, bearing, {mutate:true});
                 // console.log(`"${i}": [${turf.centroid(data).geometry.coordinates}]`);
-                drawCountry([state.movers[i]], `MOV${i}`, 'red');
+                // drawCountry([state.movers[i]], `MOV${i}`, 'red');
                 drawCountry([state.drawers[i]], `DRAW${i}`, 'green');
             });
 
@@ -218,10 +219,26 @@ function initMap() {
 
             state.startTs =+ new Date();
             state.intervalId = setInterval(step, stepMs);
-            // setTimeout(step, 2000);
+            // state.intervalId = setInterval(rotateForever, stepMs);
     }).catch(function(err) {
         console.log('SOME SHIT WENT DOWN')
         console.log(err);
+    });
+}
+
+function rotateForever() {
+    const colors = ['green', 'blue', 'purple', 'brown'];
+    console.log('rotate')
+    // a testing function to see why the drawers and movers come out of alignment
+    _.each(state.movers, (mover, i) => {
+        let pivot = turf.centroid(state.movers[i]);
+        turf.transformRotate(state.movers[i], 1, {mutate: true, pivot});
+        turf.transformRotate(state.drawers[i], 1, {mutate: true, pivot});
+
+        deleteCountry(`MOV${i}`);
+        deleteCountry(`DRAW${i}`);
+        drawCountry([state.movers[i]], `MOV${i}`, colors[i%colors.length]);
+        drawCountry([state.drawers[i]], `DRAW${i}`, colors[i%colors.length]);
     });
 }
 
@@ -267,38 +284,40 @@ function step() {
     let resetRate = 10;
     let precomps = {
             ticksSquared: (state.ticks < 50 ? state.ticks % resetRate : state.ticks)**2 + 1,
-            perterbation: 1,
+            perterbation: 0.2,
     }
-    precomps.rotRate = 100/(state.ticks+5);
-    precomps.rate = scale*(1000/(precomps.ticksSquared+5));
+    precomps.rotRate = 100/(state.ticks+5) + Math.random() / state.ticks;
+    precomps.rate = scale*(1000/(precomps.ticksSquared+5)) + Math.random() / state.ticks;
+
     console.log(state.ticks, 'rate', precomps.rate.toFixed(4), 'rotRate', precomps.rotRate.toFixed(1));
-    // console.log('tock');
 
     let gradients = _.map(state.movers, mov => computeGradient(mov, precomps, state));
 
     let somethingMoved = false,
         totalCost = 0;
     _.each(gradients, (gradient, i) => {
+        let pivot = turf.centroid(state.movers[i]);
+
         state.movers[i] = translateX(state.movers[i], gradient.x);
         state.movers[i] = translateY(state.movers[i], gradient.y);
-        turf.transformRotate(state.movers[i], gradient.r, {mutate: true});
+        turf.transformRotate(state.movers[i], gradient.r, {mutate: true, pivot});
 
         state.drawers[i] = translateX(state.drawers[i], gradient.x);
         state.drawers[i] = translateY(state.drawers[i], gradient.y);
-        turf.transformRotate(state.drawers[i], gradient.r, {mutate: true});
+        turf.transformRotate(state.drawers[i], gradient.r, {mutate: true, pivot});
 
         let shadowDistance = distCentroids(state.movers[i], state.drawers[i]);
         console.log(colors[i%colors.length], 'distance', shadowDistance.toFixed(1))
 
-        deleteCountry(`MOV${i}`);
+        // deleteCountry(`MOV${i}`);
         deleteCountry(`DRAW${i}`);
-        drawCountry([state.movers[i]], `MOV${i}`, colors[i%colors.length]);
+        // drawCountry([state.movers[i]], `MOV${i}`, colors[i%colors.length]);
         drawCountry([state.drawers[i]], `DRAW${i}`, colors[i%colors.length]);
         if(gradient.x !== 0 || gradient.y !== 0 || gradient.r !== 0) {
             somethingMoved = true;
         }
     });
-    totalCost = cost(state.movers, state.container, null, state);
+    totalCost = overlapCost(state.movers, state.container, null, state);
     svg.select('#cost-text').text(`cost: ${(totalCost/1000000000).toFixed(2)}`);
     if(!somethingMoved) {
         console.log("all gradients zero");
@@ -323,4 +342,3 @@ state.packingCountries = ['MEX', 'IND', 'JPN', 'AFG'];
 createGeoPath();
 initMap();
 initMenu();
-// drawCountries();
